@@ -172,7 +172,7 @@ Func _WD_NewTab($sSession, $bSwitch = Default, $iTimeout = Default, $sURL = Defa
 		EndIf
 	EndIf
 
-	Return SetError($_WD_ERROR_Success, 0, $sTabHandle)
+	Return SetError(__WD_Error($sFuncName, $_WD_ERROR_Success), 0, $sTabHandle)
 EndFunc   ;==>_WD_NewTab
 
 ; #FUNCTION# ====================================================================================================================
@@ -244,7 +244,7 @@ Func _WD_Attach($sSession, $sString, $sMode = Default)
 		Return SetError(__WD_Error($sFuncName, $_WD_ERROR_GeneralError), 0, $sTabHandle)
 	EndIf
 
-	Return SetError($_WD_ERROR_Success, 0, $sTabHandle)
+	Return SetError(__WD_Error($sFuncName, $_WD_ERROR_Success), 0, $sTabHandle)
 EndFunc   ;==>_WD_Attach
 
 ; #FUNCTION# ====================================================================================================================
@@ -278,13 +278,13 @@ Func _WD_LinkClickByText($sSession, $sText, $bPartial = Default)
 		$iErr = @error
 
 		If $iErr <> $_WD_ERROR_Success Then
-			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_Exception), $_WD_HTTPRESULT)
+			$iErr = $_WD_ERROR_Exception
 		EndIf
 	Else
-		Return SetError(__WD_Error($sFuncName, $_WD_ERROR_NoMatch), $_WD_HTTPRESULT)
+		$iErr = $_WD_ERROR_NoMatch
 	EndIf
 
-	Return SetError($_WD_ERROR_Success)
+	Return SetError(__WD_Error($sFuncName, $iErr), $_WD_HTTPRESULT)
 EndFunc   ;==>_WD_LinkClickByText
 
 ; #FUNCTION# ====================================================================================================================
@@ -541,9 +541,8 @@ EndFunc   ;==>_WD_IsWindowTop
 ; ===============================================================================================================================
 Func _WD_FrameEnter($sSession, $vIdentifier)
 	Local Const $sFuncName = "_WD_FrameEnter"
-	Local $sOption
-	Local $sResponse, $oJSON
-	Local $sValue
+	Local $sOption, $sResponse, $oJSON
+	Local $sValue, $iErr
 
 	;*** Encapsulate the value if it's an integer, assuming that it's supposed to be an Index, not ID attrib value.
 	If (IsKeyword($vIdentifier) = $KEYWORD_NULL) Then
@@ -555,22 +554,23 @@ Func _WD_FrameEnter($sSession, $vIdentifier)
 	EndIf
 
 	$sResponse = _WD_Window($sSession, "frame", $sOption)
+	$iErr = @error
 
-	If @error <> $_WD_ERROR_Success Then
-		Return SetError(__WD_Error($sFuncName, $_WD_ERROR_Exception), "")
-	EndIf
+	If $iErr = $_WD_ERROR_Success Then
+		$oJSON = Json_Decode($sResponse)
+		$sValue = Json_Get($oJSON, $_WD_JSON_Value)
 
-	$oJSON = Json_Decode($sResponse)
-	$sValue = Json_Get($oJSON, $_WD_JSON_Value)
-
-	;*** Evaluate the response
-	If $sValue <> Null Then
-		$sValue = Json_Get($oJSON, $_WD_JSON_Error)
+		;*** Evaluate the response
+		If $sValue <> Null Then
+			$sValue = Json_Get($oJSON, $_WD_JSON_Error)
+		Else
+			$sValue = True
+		EndIf
 	Else
-		$sValue = True
+		$iErr = $_WD_ERROR_Exception
 	EndIf
 
-	Return SetError($_WD_ERROR_Success, 0, $sValue)
+	Return SetError(__WD_Error($sFuncName, $iErr), 0, $sValue)
 EndFunc   ;==>_WD_FrameEnter
 
 ; #FUNCTION# ====================================================================================================================
@@ -776,11 +776,7 @@ Func _WD_LoadWait($sSession, $iDelay = Default, $iTimeout = Default, $sElement =
 		$iErr = @error
 	WEnd
 
-	If $iErr Then
-		Return SetError(__WD_Error($sFuncName, $iErr, ""), 0, 0)
-	EndIf
-
-	Return SetError($_WD_ERROR_Success, 0, 1)
+	Return SetError(__WD_Error($sFuncName, $iErr, ""), 0, ($iErr ? 0 : 1))
 EndFunc   ;==>_WD_LoadWait
 
 ; #FUNCTION# ====================================================================================================================
@@ -957,7 +953,6 @@ Func _WD_jQuerify($sSession, $sjQueryFile = Default, $iTimeout = Default)
 	EndIf
 
 	Return SetError(__WD_Error($sFuncName, $iErr))
-
 EndFunc   ;==>_WD_jQuerify
 
 ; #FUNCTION# ====================================================================================================================
@@ -990,8 +985,7 @@ Func _WD_ElementOptionSelect($sSession, $sStrategy, $sSelector, $sStartElement =
 		_WD_ElementAction($sSession, $sElement, 'click')
 	EndIf
 
-	Return SetError(@error, @extended)
-
+	Return SetError(__WD_Error($sFuncName, @error), @extended)
 EndFunc   ;==>_WD_ElementOptionSelect
 
 ; #FUNCTION# ====================================================================================================================
@@ -1243,7 +1237,6 @@ Func _WD_IsLatestRelease()
 	EndIf
 
 	Return SetError(__WD_Error($sFuncName, $iErr), $_WD_HTTPRESULT, $bResult)
-
 EndFunc   ;==>_WD_IsLatestRelease
 
 ; #FUNCTION# ====================================================================================================================

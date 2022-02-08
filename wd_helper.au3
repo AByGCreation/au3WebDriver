@@ -977,6 +977,8 @@ EndFunc   ;==>_WD_jQuerify
 ; Example .......: No
 ; ===============================================================================================================================
 Func _WD_ElementOptionSelect($sSession, $sStrategy, $sSelector, $sStartElement = Default)
+	Local Const $sFuncName = "_WD_ElementOptionSelect"
+
 	If $sStartElement = Default Then $sStartElement = ""
 
 	Local $sElement = _WD_FindElement($sSession, $sStrategy, $sSelector, $sStartElement)

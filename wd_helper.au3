@@ -199,7 +199,7 @@ EndFunc   ;==>_WD_NewTab
 ; ===============================================================================================================================
 Func _WD_Attach($sSession, $sString, $sMode = Default)
 	Local Const $sFuncName = "_WD_Attach"
-	Local $sTabHandle = '', $bFound = False, $sCurrentTab = '', $aHandles
+	Local $sTabHandle = '', $bFound = False, $sCurrentTab = '', $aHandles, $iErr = $_WD_ERROR_Success
 
 	If $sMode = Default Then $sMode = 'title'
 
@@ -228,7 +228,7 @@ Func _WD_Attach($sSession, $sString, $sMode = Default)
 					EndIf
 
 				Case Else
-					Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Title|URL|HTML) $sMode=>" & $sMode), 0, $sTabHandle)
+					Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(HTML|Title|URL) $sMode=>" & $sMode), 0, $sTabHandle)
 			EndSwitch
 		Next
 
@@ -238,13 +238,13 @@ Func _WD_Attach($sSession, $sString, $sMode = Default)
 				_WD_Window($sSession, 'Switch', '{"handle":"' & $sCurrentTab & '"}')
 			EndIf
 
-			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_NoMatch), 0, $sTabHandle)
+			$iErr = $_WD_ERROR_NoMatch
 		EndIf
 	Else
-		Return SetError(__WD_Error($sFuncName, $_WD_ERROR_GeneralError), 0, $sTabHandle)
+		$iErr = $_WD_ERROR_GeneralError
 	EndIf
 
-	Return SetError(__WD_Error($sFuncName, $_WD_ERROR_Success), 0, $sTabHandle)
+	Return SetError(__WD_Error($sFuncName, $iErr), 0, $sTabHandle)
 EndFunc   ;==>_WD_Attach
 
 ; #FUNCTION# ====================================================================================================================

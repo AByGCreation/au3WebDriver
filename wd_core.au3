@@ -64,7 +64,7 @@
 #EndRegion Many thanks to:
 
 #Region Global Constants
-Global Const $__WDVERSION = "0.5.1.1"
+Global Const $__WDVERSION = "0.5.2"
 
 Global Const $_WD_ELEMENT_ID = "element-6066-11e4-a52e-4f735466cecf"
 Global Const $_WD_SHADOW_ID = "shadow-6066-11e4-a52e-4f735466cecf"
@@ -427,20 +427,29 @@ EndFunc   ;==>_WD_Navigate
 ; ===============================================================================================================================
 Func _WD_Action($sSession, $sCommand, $sOption = Default)
 	Local Const $sFuncName = "_WD_Action"
-	Local $sResponse, $sResult = "", $iErr, $oJSON, $sURL
+	Local $sResponse, $sResult = "", $iErr, $oJSON, $sURLCommand
 
 	If $sOption = Default Then $sOption = ''
 
 	$sCommand = StringLower($sCommand)
-	$sURL = $_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/" & $sCommand
+	$sURLCommand = $_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/" & $sCommand
 
 	Switch $sCommand
-		Case 'back', 'forward', 'refresh'
-			$sResponse = __WD_Post($sURL, $_WD_EmptyDict)
+		Case 'actions'
+			If $sOption <> '' Then
+				$sResponse = __WD_Post($sURLCommand, $sOption)
+			Else
+				$sResponse = __WD_Delete($sURLCommand)
+			EndIf
+
 			$iErr = @error
 
-		Case 'url', 'title'
-			$sResponse = __WD_Get($sURL)
+		Case 'back', 'forward', 'refresh'
+			$sResponse = __WD_Post($sURLCommand, $_WD_EmptyDict)
+			$iErr = @error
+
+		Case 'title', 'url'
+			$sResponse = __WD_Get($sURLCommand)
 			$iErr = @error
 
 			If $iErr = $_WD_ERROR_Success Then
@@ -448,17 +457,8 @@ Func _WD_Action($sSession, $sCommand, $sOption = Default)
 				$sResult = Json_Get($oJSON, $_WD_JSON_Value)
 			EndIf
 
-		Case 'actions'
-			If $sOption <> '' Then
-				$sResponse = __WD_Post($sURL, $sOption)
-			Else
-				$sResponse = __WD_Delete($sURL)
-			EndIf
-
-			$iErr = @error
-
 		Case Else
-			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Back|Forward|Refresh|Url|Title|Actions) $sCommand=>" & $sCommand), 0, "")
+			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Actions|Back|Forward|Refresh|Title|Url) $sCommand=>" & $sCommand), 0, "")
 
 	EndSwitch
 
@@ -512,65 +512,65 @@ Func _WD_Window($sSession, $sCommand, $sOption = Default)
 	If $sOption = Default Then $sOption = ''
 
 	$sCommand = StringLower($sCommand)
-
+	Local $sURLSession = $_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/"
 	Switch $sCommand
-		Case 'window'
-			If $sOption = '' Then
-				$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/" & $sCommand)
-			Else
-				$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/" & $sCommand, $sOption)
-			EndIf
+		Case 'close'
+			$sResponse = __WD_Delete($sURLSession & "window")
+			$iErr = @error
 
+		Case 'fullscreen', 'maximize', 'minimize'
+			$sResponse = __WD_Post($sURLSession & "window/" & $sCommand, $_WD_EmptyDict)
 			$iErr = @error
 
 		Case 'handles'
-			$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/window/" & $sCommand)
-			$iErr = @error
-
-		Case 'maximize', 'minimize', 'fullscreen'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/window/" & $sCommand, $_WD_EmptyDict)
+			$sResponse = __WD_Get($sURLSession & "window/" & $sCommand)
 			$iErr = @error
 
 		Case 'new'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/window/" & $sCommand, $sOption)
+			$sResponse = __WD_Post($sURLSession & "window/" & $sCommand, $sOption)
+			$iErr = @error
+
+		Case 'frame', 'print'
+			$sResponse = __WD_Post($sURLSession & $sCommand, $sOption)
+			$iErr = @error
+
+		Case 'parent'
+			$sResponse = __WD_Post($sURLSession & "frame/parent", $sOption)
 			$iErr = @error
 
 		Case 'rect'
 			If $sOption = '' Then
-				$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/window/" & $sCommand)
+				$sResponse = __WD_Get($sURLSession & "window/" & $sCommand)
 			Else
-				$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/window/" & $sCommand, $sOption)
+				$sResponse = __WD_Post($sURLSession & "window/" & $sCommand, $sOption)
 			EndIf
 
 			$iErr = @error
 
 		Case 'screenshot'
 			If $sOption = '' Then
-				$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/" & $sCommand)
+				$sResponse = __WD_Get($sURLSession & $sCommand)
 			Else
-				$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/" & $sCommand & '/' & $sOption)
+				$sResponse = __WD_Get($sURLSession & $sCommand & '/' & $sOption)
 			EndIf
 
 			$iErr = @error
 
-		Case 'close'
-			$sResponse = __WD_Delete($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/window")
-			$iErr = @error
-
 		Case 'switch'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/window", $sOption)
+			$sResponse = __WD_Post($sURLSession & "window", $sOption)
 			$iErr = @error
 
-		Case 'frame', 'print'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/" & $sCommand, $sOption)
-			$iErr = @error
+		Case 'window'
+			If $sOption = '' Then
+				$sResponse = __WD_Get($sURLSession & $sCommand)
+			Else
+				$sResponse = __WD_Post($sURLSession & $sCommand, $sOption)
+			EndIf
 
-		Case 'parent'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/frame/parent", $sOption)
 			$iErr = @error
 
 		Case Else
-			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Window|Handles|Maximize|Minimize|Fullscreen|New|Rect|Screenshot|Close|Switch|Frame|Parent|Print) $sCommand=>" & $sCommand), 0, "")
+			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Close|Frame|Fullscreen|Handles|Maximize|Minimize|New|Parent|Print|Rect|Screenshot|Switch|Window) $sCommand=>" & $sCommand), 0, "")
 
 	EndSwitch
 
@@ -578,7 +578,7 @@ Func _WD_Window($sSession, $sCommand, $sOption = Default)
 		If $_WD_HTTPRESULT = $HTTP_STATUS_OK Then
 
 			Switch $sCommand
-				Case 'maximize', 'minimize', 'fullscreen', 'close', 'switch', 'frame', 'parent'
+				Case 'close', 'frame', 'fullscreen', 'maximize', 'minimize', 'parent', 'switch'
 					$sResult = $sResponse
 
 				Case 'new'
@@ -747,28 +747,29 @@ Func _WD_ElementAction($sSession, $sElement, $sCommand, $sOption = Default)
 
 	$sCommand = StringLower($sCommand)
 
+	Local $sURLElement = $_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/element/"
 	Switch $sCommand
 		Case 'complabel', 'comprole', 'displayed', 'enabled', 'name', 'rect', 'selected', 'shadow', 'screenshot', 'text'
-			$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/element/" & $sElement & "/" & $sCommand)
+			$sResponse = __WD_Get($sURLElement & $sElement & "/" & $sCommand)
 			$iErr = @error
 
 		Case 'active'
-			$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/element/" & $sCommand)
+			$sResponse = __WD_Get($sURLElement & $sCommand)
 			$iErr = @error
 
 		Case 'attribute', 'css', 'property'
-			$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/element/" & $sElement & "/" & $sCommand & "/" & $sOption)
+			$sResponse = __WD_Get($sURLElement & $sElement & "/" & $sCommand & "/" & $sOption)
 			$iErr = @error
 
 		Case 'clear', 'click'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/element/" & $sElement & "/" & $sCommand, '{"id":"' & $sElement & '"}')
+			$sResponse = __WD_Post($sURLElement & $sElement & "/" & $sCommand, '{"id":"' & $sElement & '"}')
 			$iErr = @error
 
 		Case 'value'
 			If $sOption Then
-				$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/element/" & $sElement & "/" & $sCommand, '{"id":"' & $sElement & '", "text":"' & __WD_EscapeString($sOption) & '"}')
+				$sResponse = __WD_Post($sURLElement & $sElement & "/" & $sCommand, '{"id":"' & $sElement & '", "text":"' & __WD_EscapeString($sOption) & '"}')
 			Else
-				$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/element/" & $sElement & "/property/value")
+				$sResponse = __WD_Get($sURLElement & $sElement & "/property/value")
 			EndIf
 
 			$iErr = @error
@@ -905,13 +906,14 @@ Func _WD_Alert($sSession, $sCommand, $sOption = Default)
 
 	$sCommand = StringLower($sCommand)
 
+	Local $sURLSession = $_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/"
 	Switch $sCommand
-		Case 'dismiss', 'accept'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/alert/" & $sCommand, $_WD_EmptyDict)
+		Case 'accept', 'dismiss'
+			$sResponse = __WD_Post($sURLSession & "alert/" & $sCommand, $_WD_EmptyDict)
 			$iErr = @error
 
 		Case 'gettext'
-			$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/alert/text")
+			$sResponse = __WD_Get($sURLSession & "alert/text")
 			$iErr = @error
 
 			If $iErr = $_WD_ERROR_Success Then
@@ -920,17 +922,17 @@ Func _WD_Alert($sSession, $sCommand, $sOption = Default)
 			EndIf
 
 		Case 'sendtext'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/alert/text", '{"text":"' & $sOption & '"}')
+			$sResponse = __WD_Post($sURLSession & "alert/text", '{"text":"' & $sOption & '"}')
 			$iErr = @error
 
 		Case 'status'
-			$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/alert/text")
+			$sResponse = __WD_Get($sURLSession & "alert/text")
 			$iErr = @error
 
 			$sResult = ($iErr = $_WD_ERROR_NoAlert) ? False : True
 
 		Case Else
-			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Dismiss|Accept|GetText|SendText|Status) $sCommand=>" & $sCommand), 0, "")
+			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Accept|Dismiss|GetText|SendText|Status) $sCommand=>" & $sCommand), 0, "")
 	EndSwitch
 
 	If $_WD_DEBUG = $_WD_DEBUG_Info Then
@@ -945,7 +947,7 @@ EndFunc   ;==>_WD_Alert
 ; Description ...: Get page source.
 ; Syntax ........: _WD_GetSource($sSession)
 ; Parameters ....: $sSession - Session ID from _WD_CreateSession
-; Return values .: Success - Source code from page.
+; Return values .: Success - HTML source code from page.
 ;                  Failure - "" (empty string) and sets @error to one of the following values:
 ;                  - $_WD_ERROR_Exception
 ; Author ........: Danp2
@@ -985,55 +987,61 @@ EndFunc   ;==>_WD_GetSource
 ; Parameters ....: $sSession - Session ID from _WD_CreateSession
 ;                  $sCommand - One of the following actions:
 ;                  |
-;                  |ADD    - Create a new cookie. $sOption has to be a JSON string
-;                  |DELETE - Delete a single cookie. The name of the cookie to delete is specified in $sOption
-;                  |GET    - Retrieve the value of a single cookie. The name of the cookie to retrieve has to be specified in $sOption
-;                  |GETALL - Retrieve the values of all cookies
+;                  |ADD       - Create a new cookie. $sOption has to be a JSON string
+;                  |DELETE    - Delete a single cookie. The name of the cookie to delete is specified in $sOption
+;                  |DELETEALL - Delete all cookies
+;                  |GET       - Retrieve the value of a single cookie. The name of the cookie to retrieve has to be specified in $sOption
+;                  |GETALL    - Retrieve the values of all cookies
 ;                  $sOption  - [optional] a string value. Default is ""
 ; Return values .: Success - Requested data returned by web driver.
 ;                  Failure - "" (empty string) and sets @error to one of the following values:
 ;                  - $_WD_ERROR_Exception
 ;                  - $_WD_ERROR_InvalidDataType
+;                  - $_WD_ERROR_InvalidArgue
 ; Author ........: Danp2
-; Modified ......:
-; Remarks .......: Please have a look at WD_Demo.au3 > DemoCookies function for how to add a new cookie
-; Related .......:
+; Modified ......: mLipok
+; Remarks .......: Please have a look at wd_demo.au3 > DemoCookies function for how to add a new cookie
+; Related .......: _WD_JsonCookie
 ; Link ..........: https://www.w3.org/TR/webdriver#cookies
 ; Example .......: No
 ; ===============================================================================================================================
 Func _WD_Cookies($sSession, $sCommand, $sOption = Default)
 	Local Const $sFuncName = "_WD_Cookies"
-	Local $sResult, $sResponse, $iErr
-
+	Local $sResult, $sResponse, $iErr = $_WD_ERROR_Success
 	If $sOption = Default Then $sOption = ''
 
+	Local $sURLSession = $_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/"
 	Switch $sCommand
-		Case 'getall'
-			$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/cookie")
+		Case 'add'
+			$sResponse = __WD_Post($sURLSession & "cookie", $sOption)
 			$iErr = @error
 
+		Case 'delete', 'deleteall'
+			If $sCommand = 'delete' And IsString($sOption) = 0 Then $iErr = $_WD_ERROR_InvalidArgue
+			If $sCommand = 'deleteall' And $sOption <> '' Then $iErr = $_WD_ERROR_InvalidArgue
 			If $iErr = $_WD_ERROR_Success Then
-				$sResult = $sResponse
+				$sResponse = __WD_Delete($sURLSession & "cookie" & ($sOption <> '') ? "/" & $sOption : "")
+				$iErr = @error
 			EndIf
 
 		Case 'get'
-			$sResponse = __WD_Get($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/cookie/" & $sOption)
+			$sResponse = __WD_Get($sURLSession & "cookie/" & $sOption)
 			$iErr = @error
 
 			If $iErr = $_WD_ERROR_Success Then
 				$sResult = $sResponse
 			EndIf
 
-		Case 'add'
-			$sResponse = __WD_Post($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/cookie", $sOption)
+		Case 'getall'
+			$sResponse = __WD_Get($sURLSession & "cookie")
 			$iErr = @error
 
-		Case 'delete'
-			$sResponse = __WD_Delete($_WD_BASE_URL & ":" & $_WD_PORT & "/session/" & $sSession & "/cookie/" & $sOption)
-			$iErr = @error
+			If $iErr = $_WD_ERROR_Success Then
+				$sResult = $sResponse
+			EndIf
 
 		Case Else
-			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(GetAll|Get|Add|Delete) $sCommand=>" & $sCommand), 0, "")
+			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Add|Delete|DeleteAll|Get|GetAll) $sCommand=>" & $sCommand), 0, "")
 	EndSwitch
 
 	If $_WD_DEBUG = $_WD_DEBUG_Info Then
@@ -1081,72 +1089,83 @@ Func _WD_Option($sOption, $vValue = Default)
 	If $vValue = Default Then $vValue = ''
 
 	Switch $sOption
-		Case "driver"
-			If $vValue == "" Then Return $_WD_DRIVER
-			If Not IsString($vValue) Then
-				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(string) $vValue: " & $vValue), 0, 0)
-			EndIf
-			$_WD_DRIVER = $vValue
-		Case "driverparams"
-			If $vValue == "" Then Return $_WD_DRIVER_PARAMS
-			If Not IsString($vValue) Then
-				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(string) $vValue: " & $vValue), 0, 0)
-			EndIf
-			$_WD_DRIVER_PARAMS = $vValue
 		Case "baseurl"
 			If $vValue == "" Then Return $_WD_BASE_URL
 			If Not IsString($vValue) Then
 				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(string) $vValue: " & $vValue), 0, 0)
 			EndIf
 			$_WD_BASE_URL = $vValue
-		Case "port"
-			If $vValue == "" Then Return $_WD_PORT
-			If Not IsInt($vValue) Then
-				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(int) $vValue: " & $vValue), 0, 0)
-			EndIf
-			$_WD_PORT = $vValue
+
 		Case "binaryformat"
 			If $vValue == "" Then Return $_WD_BFORMAT
 			If Not IsInt($vValue) Then
 				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(int) $vValue: " & $vValue), 0, 0)
 			EndIf
 			$_WD_BFORMAT = $vValue
-		Case "driverclose"
-			If $vValue == "" Then Return $_WD_DRIVER_CLOSE
-			If Not IsBool($vValue) Then
-				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(bool) $vValue: " & $vValue), 0, 0)
-			EndIf
-			$_WD_DRIVER_CLOSE = $vValue
-		Case "driverdetect"
-			If $vValue == "" Then Return $_WD_DRIVER_DETECT
-			If Not IsBool($vValue) Then
-				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(bool) $vValue: " & $vValue), 0, 0)
-			EndIf
-			$_WD_DRIVER_DETECT = $vValue
-		Case "httptimeouts"
-			If $vValue == "" Then Return $_WD_WINHTTP_TIMEOUTS
-			If Not IsBool($vValue) Then
-				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(bool) $vValue: " & $vValue), 0, 0)
-			EndIf
-			$_WD_WINHTTP_TIMEOUTS = $vValue
-		Case "debugtrim"
-			If $vValue == "" Then Return $_WD_RESPONSE_TRIM
-			If Not IsInt($vValue) Then
-				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(int) $vValue: " & $vValue), 0, 0)
-			EndIf
-			$_WD_RESPONSE_TRIM = $vValue
+
 		Case "console"
 			If $vValue == "" Then Return $_WD_CONSOLE
 			If Not (IsString($vValue) Or IsInt($vValue)) Then
 				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(string/int) $vValue: " & $vValue), 0, 0)
 			EndIf
 			$_WD_CONSOLE = $vValue
+
+		Case "debugtrim"
+			If $vValue == "" Then Return $_WD_RESPONSE_TRIM
+			If Not IsInt($vValue) Then
+				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(int) $vValue: " & $vValue), 0, 0)
+			EndIf
+			$_WD_RESPONSE_TRIM = $vValue
+
 		Case "DefaultTimeout"
 			If $vValue == "" Then Return $_WD_DefaultTimeout
 			If Not IsInt($vValue) Then
 				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(int) $vValue: " & $vValue), 0, 0)
 			EndIf
 			$_WD_DefaultTimeout = $vValue
+
+		Case "driver"
+			If $vValue == "" Then Return $_WD_DRIVER
+			If Not IsString($vValue) Then
+				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(string) $vValue: " & $vValue), 0, 0)
+			EndIf
+			$_WD_DRIVER = $vValue
+
+		Case "driverclose"
+			If $vValue == "" Then Return $_WD_DRIVER_CLOSE
+			If Not IsBool($vValue) Then
+				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(bool) $vValue: " & $vValue), 0, 0)
+			EndIf
+			$_WD_DRIVER_CLOSE = $vValue
+
+		Case "driverdetect"
+			If $vValue == "" Then Return $_WD_DRIVER_DETECT
+			If Not IsBool($vValue) Then
+				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(bool) $vValue: " & $vValue), 0, 0)
+			EndIf
+			$_WD_DRIVER_DETECT = $vValue
+
+		Case "driverparams"
+			If $vValue == "" Then Return $_WD_DRIVER_PARAMS
+			If Not IsString($vValue) Then
+				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(string) $vValue: " & $vValue), 0, 0)
+			EndIf
+			$_WD_DRIVER_PARAMS = $vValue
+
+		Case "httptimeouts"
+			If $vValue == "" Then Return $_WD_WINHTTP_TIMEOUTS
+			If Not IsBool($vValue) Then
+				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(bool) $vValue: " & $vValue), 0, 0)
+			EndIf
+			$_WD_WINHTTP_TIMEOUTS = $vValue
+
+		Case "port"
+			If $vValue == "" Then Return $_WD_PORT
+			If Not IsInt($vValue) Then
+				Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(int) $vValue: " & $vValue), 0, 0)
+			EndIf
+			$_WD_PORT = $vValue
+
 		Case "Sleep"
 			If $vValue == "" Then Return $_WD_Sleep
 			If Not IsFunc($vValue) Then
@@ -1155,7 +1174,7 @@ Func _WD_Option($sOption, $vValue = Default)
 			$_WD_Sleep = $vValue
 
 		Case Else
-			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Driver|DriverParams|BaseURL|Port|BinaryFormat|DriverClose|DriverDetect|HTTPTimeouts|DebugTrim|Console|DefaultTimeout|Sleep) $sOption=>" & $sOption), 0, 0)
+			Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(BaseURL|BinaryFormat|Console|DebugTrim|DefaultTimeout|Driver|DriverClose|DriverDetect|DriverParams|HTTPTimeouts|Port|Sleep) $sOption=>" & $sOption), 0, 0)
 	EndSwitch
 
 	Return 1
@@ -1215,7 +1234,7 @@ Func _WD_Startup()
 
 		__WD_ConsoleWrite($sFuncName & ": OS:" & @TAB & @OSVersion & " " & @OSType & " " & @OSBuild & " " & @OSServicePack & @CRLF)
 		__WD_ConsoleWrite($sFuncName & ": AutoIt:" & @TAB & @AutoItVersion & @CRLF)
-		__WD_ConsoleWrite($sFuncName & ": WD.au3:" & @TAB & $__WDVERSION & $sUpdate & @CRLF)
+		__WD_ConsoleWrite($sFuncName & ": au3WD UDF:" & @TAB & $__WDVERSION & $sUpdate & @CRLF)
 		__WD_ConsoleWrite($sFuncName & ": WinHTTP:" & @TAB & $sWinHttpVer & @CRLF)
 		__WD_ConsoleWrite($sFuncName & ": Driver:" & @TAB & $_WD_DRIVER & @CRLF)
 		__WD_ConsoleWrite($sFuncName & ": Params:" & @TAB & $_WD_DRIVER_PARAMS & @CRLF)

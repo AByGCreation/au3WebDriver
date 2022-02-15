@@ -2,6 +2,7 @@
 ; standard UDF's
 #include <ButtonConstants.au3>
 #include <ColorConstants.au3>
+#include <Date.au3>
 #include <GuiComboBoxEx.au3>
 #include <GUIConstantsEx.au3>
 #include <WindowsConstants.au3>
@@ -20,8 +21,8 @@ Global Const $aBrowsers[][2] = _
 		]
 
 ; Column 0 - Function Name
-; Column 1 - Selected at start
-; Column 2 - Pass browser name as parameter to callad function
+; Column 1 - Selected at start or selected manually by user
+; Column 2 - Pass browser name as parameter to called function
 Global $aDemoSuite[][3] = _
 		[ _
 		["DemoTimeouts", False, False], _
@@ -129,14 +130,16 @@ Func _WD_Demo()
 			Case $idDebugging
 
 			Case $idButton_Run
-				GUICtrlSetState($idButton_Run, $GUI_DISABLE)
+				_RunDemo_GUISwitcher($GUI_DISABLE, $idBrowsers, $idDebugging, $idUpdate, $idHeadless, $idButton_Run, $aCheckboxes)
 				RunDemo($idDebugging, $idBrowsers, $idUpdate, $idHeadless)
-				GUICtrlSetState($idButton_Run, $GUI_ENABLE)
+				_RunDemo_GUISwitcher($GUI_ENABLE, $idBrowsers, $idDebugging, $idUpdate, $idHeadless, $idButton_Run, $aCheckboxes)
 
 			Case Else
 				For $i = 0 To $iCount - 1
 					If $aCheckboxes[$i] = $nMsg Then
 						$aDemoSuite[$i][1] = Not $aDemoSuite[$i][1]
+						_ArraySearch($aDemoSuite, True, Default, Default, Default, Default, Default, 1)
+						GUICtrlSetState($idButton_Run, @error ? $GUI_DISABLE : $GUI_ENABLE)
 					EndIf
 				Next
 
@@ -147,68 +150,103 @@ Func _WD_Demo()
 EndFunc   ;==>_WD_Demo
 
 Func RunDemo($idDebugging, $idBrowsers, $idUpdate, $idHeadless)
-	; Set debug level
+	; Check selected debugging option and set desired debug level
 	$_WD_DEBUG = $aDebugLevel[_GUICtrlComboBox_GetCurSel($idDebugging)][1]
 
-	#Region - WebeDriver update
+	; Get selected browser
+	Local $sBrowserName = $aBrowsers[_GUICtrlComboBox_GetCurSel($idBrowsers)][0]
+
+	; Check & update WebDriver per user setting
+	_RunDemo_Update($idUpdate, $sBrowserName)
+
+	; Check and set desired headless mode
+	Local $bHeadless = _RunDemo_Headless($idHeadless)
+
+	; Execute browser setup routine for user's browser selection
+	Local $sCapabilities = Call($aBrowsers[_GUICtrlComboBox_GetCurSel($idBrowsers)][1], $bHeadless)
+
+	ConsoleWrite("> _WD_Startup" & @CRLF)
+	Local $iWebDriver_PID = _WD_Startup()
+	If _RunDemo_ErrorHander((@error <> $_WD_ERROR_Success), @error, @extended, $iWebDriver_PID, $sSession) Then Return
+
+	ConsoleWrite("> _WD_CreateSession" & @CRLF)
+	$sSession = _WD_CreateSession($sCapabilities)
+	If _RunDemo_ErrorHander((@error <> $_WD_ERROR_Success), @error, @extended, $iWebDriver_PID, $sSession) Then Return
+
+	Local $iError, $sDemoName
+	For $iIndex = 0 To UBound($aDemoSuite, $UBOUND_ROWS) - 1
+		$sDemoName = $aDemoSuite[$iIndex][0]
+		If Not $aDemoSuite[$iIndex][1] Then
+			ConsoleWrite("> Bypass: " & $sDemoName & @CRLF)
+			ContinueLoop
+		EndIf
+
+		ConsoleWrite("+ Running: " & $sDemoName & @CRLF)
+		If $aDemoSuite[$iIndex][2] Then
+			Call($sDemoName, $sBrowserName)
+		Else
+			Call($sDemoName)
+		EndIf
+		$iError = @error
+		If $iError <> $_WD_ERROR_Success Then ExitLoop
+		ConsoleWrite("+ Finished: " & $sDemoName & @CRLF)
+	Next
+
+	_RunDemo_ErrorHander(True, $iError, @extended, $iWebDriver_PID, $sSession, $sDemoName)
+EndFunc   ;==>RunDemo
+
+Func _RunDemo_Update($idUpdate, $sBrowserName)
 	Local $sUpdate
 	_GUICtrlComboBox_GetLBText($idUpdate, _GUICtrlComboBox_GetCurSel($idUpdate), $sUpdate)
 
 	Local $bFlag64 = (StringInStr($sUpdate, '64') > 0)
 	If StringInStr($sUpdate, 'Current') Then $bFlag64 = Default
+
 	Local $bForce = (StringInStr($sUpdate, 'Force') > 0)
 	If $sUpdate = 'Report only' Then $bForce = Null
 
-	Local $sBrowser = $aBrowsers[_GUICtrlComboBox_GetCurSel($idBrowsers)][0]
-	Local $bUpdateResult = _WD_UpdateDriver($sBrowser, @ScriptDir, $bFlag64, $bForce)
+	Local $bUpdateResult = _WD_UpdateDriver($sBrowserName, @ScriptDir, $bFlag64, $bForce)
 	ConsoleWrite('$bUpdateResult = ' & $bUpdateResult & @CRLF)
-	#EndRegion - WebeDriver update
+EndFunc   ;==>_RunDemo_Update
 
-	#Region - Headless
+Func _RunDemo_Headless($idHeadless)
 	Local $sHeadless
 	_GUICtrlComboBox_GetLBText($idHeadless, _GUICtrlComboBox_GetCurSel($idHeadless), $sHeadless)
-	Local $bHeadless = ($sHeadless = 'Yes')
-	#EndRegion - Headless
+	Return ($sHeadless = 'Yes')
+EndFunc   ;==>_RunDemo_Headless
 
-	; Execute browser setup routine for user's browser selection
-	Local $sCapabilities = Call($aBrowsers[_GUICtrlComboBox_GetCurSel($idBrowsers)][1], $bHeadless)
+Func _RunDemo_GUISwitcher($iState, $idBrowsers, $idDebugging, $idUpdate, $idHeadless, $idButton_Run, $aCheckboxes)
+	GUICtrlSetState($idBrowsers, $iState)
+	GUICtrlSetState($idDebugging, $iState)
+	GUICtrlSetState($idUpdate, $iState)
+	GUICtrlSetState($idHeadless, $iState)
+	GUICtrlSetState($idButton_Run, $iState)
+	For $i = 0 To UBound($aCheckboxes, $UBOUND_ROWS) - 1 Step 1
+		GUICtrlSetState($aCheckboxes[$i], $iState)
+	Next
+EndFunc   ;==>_RunDemo_GUISwitcher
 
-	_WD_Startup()
-	If @error <> $_WD_ERROR_Success Then Return
+Func _RunDemo_ErrorHander($bForceDispose, $iError, $iExtended, $iWebDriver_PID, $sSession, $sDemoName = 'Demo')
+	If Not $bForceDispose Then Return SetError($iError, $iExtended, $bForceDispose)
 
-	$sSession = _WD_CreateSession($sCapabilities)
+	Switch $iError
+		Case $_WD_ERROR_Success
+			MsgBox($MB_ICONINFORMATION, 'Demo complete!', 'Click "Ok" button to shutdown the browser and console')
+		Case $_WD_ERROR_UserAbort
+			ConsoleWrite("- Aborted: " & $sDemoName & @CRLF)
+			MsgBox($MB_ICONINFORMATION, $sDemoName & ' aborted!', 'Click "Ok" button to shutdown the browser and console')
+		Case Else
+			ConsoleWrite("! Error = " & $iError & " occured on: " & $sDemoName & @CRLF)
+			ConsoleWrite("! $_WD_HTTPRESULT = " & $_WD_HTTPRESULT & @CRLF)
+			ConsoleWrite("! $_WD_SESSION_DETAILS = " & $_WD_SESSION_DETAILS & @CRLF)
+			MsgBox($MB_ICONERROR, $sDemoName & ' error!', 'Check logs')
+	EndSwitch
 
-	Local $iError
-	If @error = $_WD_ERROR_Success Then
-		For $iIndex = 0 To UBound($aDemoSuite, $UBOUND_ROWS) - 1
-			If $aDemoSuite[$iIndex][1] Then
-				ConsoleWrite("+Running: " & $aDemoSuite[$iIndex][0] & @CRLF)
-				If $aDemoSuite[$iIndex][2] Then
-					Call($aDemoSuite[$iIndex][0], $sBrowser)
-				Else
-					Call($aDemoSuite[$iIndex][0])
-				EndIf
-				$iError = @error
-				If $iError = $_WD_ERROR_UserAbort Then
-					ConsoleWrite("- Aborted: " & $aDemoSuite[$iIndex][0] & @CRLF)
-					ExitLoop
-				EndIf
-				ConsoleWrite("+Finished: " & $aDemoSuite[$iIndex][0] & @CRLF)
-			Else
-				ConsoleWrite("Bypass: " & $aDemoSuite[$iIndex][0] & @CRLF)
-			EndIf
-		Next
-	EndIf
+	If $sSession Then _WD_DeleteSession($sSession)
+	If $iWebDriver_PID Then _WD_Shutdown()
 
-	If $iError = $_WD_ERROR_UserAbort Then
-		MsgBox($MB_ICONINFORMATION, 'Demo aborted!', 'Click "Ok" button to shutdown the browser and console')
-	Else
-		MsgBox($MB_ICONINFORMATION, 'Demo complete!', 'Click "Ok" button to shutdown the browser and console')
-	EndIf
-
-	_WD_DeleteSession($sSession)
-	_WD_Shutdown()
-EndFunc   ;==>RunDemo
+	Return SetError($iError, $iExtended, $bForceDispose)
+EndFunc   ;==>_RunDemo_ErrorHander
 
 Func DemoTimeouts()
 	; Retrieve current settings and save
@@ -233,15 +271,21 @@ EndFunc   ;==>DemoTimeouts
 
 Func DemoNavigation()
 	_WD_Navigate($sSession, "http://google.com")
+	ConsoleWrite("URL=" & _WD_Action($sSession, 'url') & @CRLF)
+
 	_WD_NewTab($sSession, Default, Default, "http://yahoo.com")
+	ConsoleWrite("URL=" & _WD_Action($sSession, 'url') & @CRLF)
+
 	;	_WD_Navigate($sSession, "http://yahoo.com")
 	_WD_NewTab($sSession, True, Default, 'http://bing.com', 'width=200,height=200')
-
 	ConsoleWrite("URL=" & _WD_Action($sSession, 'url') & @CRLF)
+
 	_WD_Attach($sSession, "google.com", "URL")
 	ConsoleWrite("URL=" & _WD_Action($sSession, 'url') & @CRLF)
+
 	_WD_Attach($sSession, "yahoo.com", "URL")
 	ConsoleWrite("URL=" & _WD_Action($sSession, 'url') & @CRLF)
+
 EndFunc   ;==>DemoNavigation
 
 Func DemoElements()
@@ -343,14 +387,48 @@ Func DemoScript()
 EndFunc   ;==>DemoScript
 
 Func DemoCookies()
+	ConsoleWrite("- WD: Navigating:" & @CRLF)
 	_WD_Navigate($sSession, "http://google.com")
-	_WD_Cookies($sSession, 'Get', 'NID')
 
-	Local $sName = "Testname"
+	ConsoleWrite("- WD: Get all cookies:" & @CRLF)
+	Local $sAllCookies = _WD_Cookies($sSession, 'getall')
+	ConsoleWrite("- Cookies (obtained at start after navigate) : " & $sAllCookies & @CRLF)
+
+	ConsoleWrite("- WD: Get 'NID' cookie:" & @CRLF)
+	Local $sNID = _WD_Cookies($sSession, 'Get', 'NID')
+	ConsoleWrite("- Cookie obtained 'NID' : " & $sNID & @CRLF)
+
+	Local $sName = "TestName"
 	Local $sValue = "TestValue"
-	Local $sCookie = '{"cookie": {"name":"' & $sName & '","value":"' & $sValue & '"}}'
+
+	; calculate UNIX EPOCH time
+	Local $sNowPlus2Years = _DateAdd('Y', 2, _NowCalc())
+	Local $iDateCalc = Int(_DateDiff('s', "1970/01/01 00:00:00", $sNowPlus2Years))
+
+	; create JSON string for cookie
+	Local $sCookie = _WD_JsonCookie($sName, $sValue, Default, 'www.google.com', True, False, $iDateCalc, "None")
+
+	ConsoleWrite("- WD: Add cookie:" & @CRLF)
 	_WD_Cookies($sSession, 'add', $sCookie)
-	_WD_Cookies($sSession, 'Get', $sName)
+
+	ConsoleWrite("- WD: Check cookie:" & @CRLF)
+	Local $sResult = _WD_Cookies($sSession, 'get', $sName)
+
+	; compare results in console
+	ConsoleWrite("- Cookie added    : " & $sCookie & @CRLF)
+	ConsoleWrite("- Cookie obtained : " & $sResult & @CRLF)
+
+	ConsoleWrite("- WD: Get all cookies:" & @CRLF)
+	$sAllCookies = _WD_Cookies($sSession, 'getall')
+	ConsoleWrite("- Cookies (obtained before 'deleteall') : " & $sAllCookies & @CRLF)
+
+	ConsoleWrite("- WD: Delete all cookies:" & @CRLF)
+	_WD_Cookies($sSession, 'deleteall')
+
+	ConsoleWrite("- WD: Get all cookies:" & @CRLF)
+	$sAllCookies = _WD_Cookies($sSession, 'getall')
+	ConsoleWrite("- Cookies (obtained after 'deleteall') : " & $sAllCookies & @CRLF)
+
 EndFunc   ;==>DemoCookies
 
 Func DemoAlerts()
@@ -442,8 +520,8 @@ Func DemoActions()
 			'			"type":"pointer",' & _
 			'			"parameters":{"pointerType":"mouse"},' & _
 			'			"actions":[' & _
-			_WD_JsonActionPointer("pointerMove", Default, $sElement, 0, 0, 100) & ','  & _
-			_WD_JsonActionPointer("pointerDown", $_WD_BUTTON_Right) & ','  & _
+			_WD_JsonActionPointer("pointerMove", Default, $sElement, 0, 0, 100) & ',' & _
+			_WD_JsonActionPointer("pointerDown", $_WD_BUTTON_Right) & ',' & _
 			_WD_JsonActionPointer("pointerUp", $_WD_BUTTON_Right) & _
 			'			]' & _
 			'		}' & _

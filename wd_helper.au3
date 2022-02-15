@@ -992,13 +992,14 @@ EndFunc   ;==>_WD_ElementOptionSelect
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _WD_ElementSelectAction
-; Description ...: Perform action on desginated Select element.
+; Description ...: Perform action on desginated <select> element.
 ; Syntax ........: _WD_ElementSelectAction($sSession, $sSelectElement, $sCommand)
 ; Parameters ....: $sSession       - Session ID from _WD_CreateSession
-;                  $sSelectElement - Element ID of Select element from _WD_FindElement
+;                  $sSelectElement - Element ID of <select> element from _WD_FindElement
 ;                  $sCommand       - Action to be performed. Can be one of the following:
-;                  |OPTIONS - Retrieve array containing value / label attributes from the Select element's options
-;                  |VALUE   - Retrieve current value
+;                  |OPTIONS        - Retrieves all <option> elements as 2D array containing 4 columns (value, label, index and selected status)
+;                  |SELECTEDINDEX  - Retrieves 0-based index of the first selected <option> element
+;                  |VALUE          - Retrieves value of the first selected <option> element
 ; Return values .: Success - Requested data returned by web driver.
 ;                  Failure - "" (empty string) and sets @error to one of the following values:
 ;                  - $_WD_ERROR_NoMatch
@@ -1008,39 +1009,43 @@ EndFunc   ;==>_WD_ElementOptionSelect
 ;                  - $_WD_ERROR_InvalidArgue
 ; Author ........: Danp2
 ; Modified ......: mLipok
-; Remarks .......:
+; Remarks .......: If no option is selected, SELECTEDINDEX will return -1
 ; Related .......: _WD_FindElement, _WD_ExecuteScript
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
 Func _WD_ElementSelectAction($sSession, $sSelectElement, $sCommand)
 	Local Const $sFuncName = "_WD_ElementSelectAction"
-	Local $sNodeName, $vResult
-
+	Local $sNodeName, $vResult, $sScript
 	$sNodeName = _WD_ElementAction($sSession, $sSelectElement, 'property', 'nodeName')
 	Local $iErr = @error
 
 	If $iErr = $_WD_ERROR_Success Then
-		If $sNodeName = 'select' Then
+		If $sNodeName = 'select' Then ; check if designated element is <select> element
 			Switch $sCommand
-				Case 'value'
-					; Retrieve current value of designated Select element
-					$vResult = _WD_ExecuteScript($sSession, "return arguments[0].value", __WD_JsonElement($sSelectElement), Default, $_WD_JSON_Value)
-					$iErr = @error
-
 				Case 'options'
-					; Retrieve array containing value / label attributes from the Select element's options
-					Local $sScript = "var result =''; var options = arguments[0].options; for (let i = 0; i < options.length; i++) {result += options[i].value + '|' + options[i].label + '\n'} return result;"
+					$sScript = "var result ='' ; var options = arguments[0].options; for (let i = 0; i < options.length; i++) {result += options[i].value + '|' + options[i].label + '|' + options[i].index + '|' + options[i].selected + '\n'} return result;"
 					$vResult = _WD_ExecuteScript($sSession, $sScript, __WD_JsonElement($sSelectElement), Default, $_WD_JSON_Value)
 					$iErr = @error
+
 					If $iErr = $_WD_ERROR_Success Then
-						Local $sText = StringStripWS($vResult, $STR_STRIPTRAILING)
-						Local $aOut[0][2]
-						_ArrayAdd($aOut, $sText, 0, Default, @LF, 1)
-						$vResult = $aOut
+						Local $aAllOptions[0][4]
+						_ArrayAdd($aAllOptions, StringStripWS($vResult, $STR_STRIPTRAILING), 0, Default, @LF, $ARRAYFILL_FORCE_SINGLEITEM)
+						$vResult = $aAllOptions
 					EndIf
+
+				Case 'selectedIndex'
+					$sScript = "return arguments[0].selectedIndex"
+					$vResult = _WD_ExecuteScript($sSession, $sScript, __WD_JsonElement($sSelectElement), Default, $_WD_JSON_Value)
+					$iErr = @error
+
+				Case 'value'
+					$sScript = "return arguments[0].value"
+					$vResult = _WD_ExecuteScript($sSession, $sScript, __WD_JsonElement($sSelectElement), Default, $_WD_JSON_Value)
+					$iErr = @error
+
 				Case Else
-					Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(Value|Options) $sCommand=>" & $sCommand), 0, "")
+					Return SetError(__WD_Error($sFuncName, $_WD_ERROR_InvalidDataType, "(options|selectedIndex|value) $sCommand=>" & $sCommand), 0, "")
 
 			EndSwitch
 		Else
@@ -1215,10 +1220,10 @@ EndFunc   ;==>_WD_SelectFiles
 ; ===============================================================================================================================
 Func _WD_IsLatestRelease()
 	Local Const $sFuncName = "_WD_IsLatestRelease"
-	Local Const $sGitURL = "https://github.com/Danp2/WebDriver/releases/latest"
+	Local Const $sGitURL = "https://github.com/Danp2/au3WebDriver/releases/latest"
 	Local $bResult = Null
 	Local $iErr = $_WD_ERROR_Success
-	Local $sRegex = '<a.*href="\/Danp2\/WebDriver\/releases\/tag\/(.*?)"'
+	Local $sRegex = '<a.*href="\/Danp2\/au3WebDriver\/releases\/tag\/(.*?)"'
 
 	Local $sResult = InetRead($sGitURL)
 	If @error Then $iErr = $_WD_ERROR_GeneralError
@@ -1251,9 +1256,9 @@ EndFunc   ;==>_WD_IsLatestRelease
 ;                  $bForce      - [optional] Force update? Default is False
 ; Return values .: Success - True (Driver was updated).
 ;                  Failure - False (Driver was not updated) and sets @error to one of the following values:
-;                  - $_WD_ERROR_NoMatch
 ;                  - $_WD_ERROR_InvalidValue
 ;                  - $_WD_ERROR_GeneralError
+;                  - $_WD_ERROR_NotFound
 ; Author ........: Danp2, CyCho
 ; Modified ......: mLipok
 ; Remarks .......: When $bForce = Null, then the function will check for an updated webdriver without actually performing the update.
@@ -1378,38 +1383,41 @@ Func _WD_UpdateDriver($sBrowser, $sInstallDir = Default, $bFlag64 = Default, $bF
 				ElseIf $bUpdateAvail Or $bForce Then
 					$sTempFile = _TempFile($sInstallDir, "webdriver_", ".zip")
 					_WD_DownloadFile($sURLNewDriver, $sTempFile)
-
-					; Close any instances of webdriver and delete from disk
-					__WD_CloseDriver($sDriverEXE)
-					FileDelete($sInstallDir & $sDriverEXE)
-
-					; Handle COM Errors
-					Local $oErr = ObjEvent("AutoIt.Error", __WD_ErrHnd)
-					#forceref $oErr
-
-					; Extract new instance of webdriver
-					$oShell = ObjCreate("Shell.Application")
 					If @error Then
-						$iErr = $_WD_ERROR_GeneralError
+						$iErr = @error
 					Else
-						$FilesInZip = $oShell.NameSpace($sTempFile).items
+						; Close any instances of webdriver and delete from disk
+						__WD_CloseDriver($sDriverEXE)
+						FileDelete($sInstallDir & $sDriverEXE)
+
+						; Handle COM Errors
+						Local $oErr = ObjEvent("AutoIt.Error", __WD_ErrHnd)
+						#forceref $oErr
+
+						; Extract new instance of webdriver
+						$oShell = ObjCreate("Shell.Application")
 						If @error Then
 							$iErr = $_WD_ERROR_GeneralError
 						Else
-							For $FileItem In $FilesInZip ; Check the files in the archive separately
-								If StringRight($FileItem.Name, 4) = ".exe" Then ; extract only EXE files
-									$oShell.NameSpace($sInstallDir).CopyHere($FileItem, 20) ; 20 = (4) Do not display a progress dialog box. + (16) Respond with "Yes to All" for any dialog box that is displayed.
-								EndIf
-							Next
+							Local $oNameSpace = $oShell.NameSpace($sTempFile)
+							$FilesInZip = $oNameSpace.items
 							If @error Then
 								$iErr = $_WD_ERROR_GeneralError
 							Else
-								$iErr = $_WD_ERROR_Success
-								$bResult = True
+								For $FileItem In $FilesInZip ; Check the files in the archive separately
+									If StringRight($FileItem.Name, 4) = ".exe" Then ; extract only EXE files
+										$oShell.NameSpace($sInstallDir).CopyHere($FileItem, 20) ; 20 = (4) Do not display a progress dialog box. + (16) Respond with "Yes to All" for any dialog box that is displayed.
+									EndIf
+								Next
+								If @error Then
+									$iErr = $_WD_ERROR_GeneralError
+								Else
+									$iErr = $_WD_ERROR_Success
+									$bResult = True
+								EndIf
 							EndIf
 						EndIf
 					EndIf
-
 					FileDelete($sTempFile)
 				EndIf
 			EndIf
@@ -1538,7 +1546,7 @@ Func _WD_DownloadFile($sURL, $sDest, $iOptions = Default)
 	If $iOptions = Default Then $iOptions = $INET_FORCERELOAD + $INET_IGNORESSL + $INET_BINARYTRANSFER
 
 	Local $sData = InetRead($sURL, $iOptions)
-	If @error Then $iErr = $_WD_ERROR_GeneralError
+	If @error Then $iErr = $_WD_ERROR_NotFound
 
 	If $iErr = $_WD_ERROR_Success Then
 		Local $hFile = FileOpen($sDest, $FO_OVERWRITE + $FO_BINARY)
@@ -1551,8 +1559,6 @@ Func _WD_DownloadFile($sURL, $sDest, $iOptions = Default)
 		Else
 			$iErr = $_WD_ERROR_GeneralError
 		EndIf
-	Else
-		$iErr = $_WD_ERROR_NotFound
 	EndIf
 
 	If $_WD_DEBUG = $_WD_DEBUG_Info Then
@@ -2174,6 +2180,52 @@ Func _WD_JsonActionPause($iDuration)
 
 	Return $sJSON
 EndFunc   ;==>_WD_JsonActionPause
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _WD_JsonCookie
+; Syntax ........: _WD_JsonCookie($sName, $sValue[, $sPath = Default[, $sDomain = Default[, $bSecure = Default [,
+;                  $bHTTPOnly = Default[, $iExpiryTime = Default[, $sSameSite = Default]]]]]])
+; Parameters ....: $sName               - The name of the cookie.
+;                  $sValue              - The cookie value.
+;                  $sPath               - [optional] This defines the cookie path.
+;                  $sDomain             - [optional] This defines the domain the cookie is visible to.
+;                  $bSecure             - [optional] This defines whether the cookie is a secure cookie.
+;                  $bHTTPOnly           - [optional] This defines whether the cookie is an HTTP only cookie.
+;                  $iExpiryTime         - [optional] This defines when the cookie expires, specified in seconds since Unix Epoch.
+;                  $sSameSite           - [optional] This defines whether the cookie applies to a SameSite policy. One of the following modes can be used:
+;                  |None
+;                  |Lax
+;                  |Strict
+; Return values .: Cookie as formatted JSON strings
+; Author ........: mLipok
+; Modified ......:
+; Remarks .......:
+; Related .......: _WD_Cookies
+; Link ..........: https://www.w3.org/TR/webdriver/#dfn-table-for-cookie-conversion
+; Example .......: No
+; ===============================================================================================================================
+Func _WD_JsonCookie($sName, $sValue, $sPath = Default, $sDomain = Default, $bSecure = Default, $bHTTPOnly = Default, $iExpiryTime = Default, $sSameSite = Default)
+	Local Const $sFuncName = "_WD_JsonCookie"
+
+	; Create JSON
+	Local $vData = Json_ObjCreate()
+	Json_Put($vData, '.cookie.name', $sName)
+	Json_Put($vData, '.cookie.value', $sValue)
+	If $sPath <> Default Then Json_Put($vData, '.cookie.path', $sPath)
+	If $sDomain <> Default Then Json_Put($vData, '.cookie.domain', $sDomain)
+	If $bSecure <> Default Then Json_Put($vData, '.cookie.secure', $bSecure)
+	If $bHTTPOnly <> Default Then Json_Put($vData, '.cookie.httponly', $bHTTPOnly)
+	If $iExpiryTime <> Default Then Json_Put($vData, '.cookie.expiry', $iExpiryTime)
+	If $sSameSite <> Default Then Json_Put($vData, '.cookie.sameSite', $sSameSite)
+
+	Local $sJSON = Json_Encode($vData)
+
+	If $_WD_DEBUG = $_WD_DEBUG_Info Then
+		__WD_ConsoleWrite($sFuncName & ': ' & $sJSON & @CRLF)
+	EndIf
+
+	Return $sJSON
+EndFunc   ;==>_WD_JsonCookie
 
 ; #INTERNAL_USE_ONLY# ====================================================================================================================
 ; Name ..........: __WD_Base64Decode
